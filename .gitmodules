@@ -1,0 +1,3 @@
+[submodule "json_schema_gen"]
+	path = json_schema_gen
+	url = git@github.com:anelendata/json_schema_gen.git
