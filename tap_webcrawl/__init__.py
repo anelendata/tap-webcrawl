@@ -12,7 +12,7 @@ from singer.catalog import Catalog
 import singer.metrics as metrics
 
 from . import crawler
-from json_schema_gen import infer_from_csv_file
+from json_schema_gen import infer_from_csv_file, read_csv_as_dict
 
 
 SPEC_FILE = "./tap_rest_api_spec.json"
@@ -89,7 +89,7 @@ def get_start(STATE, tap_stream_id, bookmark_key):
 def get_end():
     if CONFIG.get("timestamp_key"):
         end_from_config = CONFIG.get("end_timestamp")
-        if end_from_config is None:
+        if end_from_config is None and CONFIG["end_datetime"]:
             end_from_config = dateutil.parser.parse(CONFIG["end_datetime"]).timestamp()
     elif CONFIG.get("datetime_key"):
         end_from_config = CONFIG.get("end_datetime")
@@ -241,7 +241,7 @@ def gen_request(stream_id, url, auth_method="basic"):
         resp.raise_for_status()
         return resp.json()
 
-def sync_rows(STATE, tap_stream_id, key_properties=[], auth_method=None, max_page=None):
+def sync_rows(filename, STATE, tap_stream_id, key_properties=[], auth_method=None, max_page=None):
     schema = load_schema(tap_stream_id)
     singer.write_schema(tap_stream_id, schema, key_properties)
 
@@ -254,7 +254,8 @@ def sync_rows(STATE, tap_stream_id, key_properties=[], auth_method=None, max_pag
     pretty_end = end
     if bookmark_type == "timestamp":
         pretty_start = str(start) + " (" + str(datetime.datetime.fromtimestamp(start)) + ")"
-        pretty_end = str(end) + " (" + str(datetime.datetime.fromtimestamp(end)) + ")"
+        if end is not None:
+            pretty_end = str(end) + " (" + str(datetime.datetime.fromtimestamp(end)) + ")"
 
     LOGGER.info("Stream %s has %s set starting %s and ending %s. I trust you set URL format contains those params. The behavior depends on the data source API's spec. I will not filter out the records outside the boundary. Every record received is will be written out." % (tap_stream_id, bookmark_type, pretty_start, pretty_end))
 
@@ -263,31 +264,31 @@ def sync_rows(STATE, tap_stream_id, key_properties=[], auth_method=None, max_pag
     offset_number = 0  # Offset is the number of records (vs. page)
     etl_tstamp = int(time.time())
     with metrics.record_counter(tap_stream_id) as counter:
-        while True:
-            params = CONFIG
-            params.update({"current_page": page_number})
-            params.update({"current_offset": offset_number})
-            endpoint = get_endpoint(tap_stream_id, params)
-            LOGGER.info("GET %s", endpoint)
-            rows = gen_request(tap_stream_id, endpoint, auth_method)
-            rows = get_record_list(rows, CONFIG.get("record_list_level"))
-            for row in rows:
-                counter.increment()
-                row = get_record(row, CONFIG.get("record_level"))
-                row = filter_result(row, schema)
-                if "_etl_tstamp" in schema["properties"].keys():
-                    row["_etl_tstamp"] = etl_tstamp
-                last_update = get_last_update(row, last_update)
-                singer.write_record(tap_stream_id, row)
+        data = read_csv_as_dict(filename,
+                                skip=CONFIG.get("skip"),
+                                lower=True,
+                                replace_special="_",
+                                snake_case=True
+                                )
+        for row in data:
+            counter.increment()
+            row = get_record(row, CONFIG.get("record_level"))
+            row = filter_result(row, schema)
+            if "_etl_tstamp" in schema["properties"].keys():
+                row["_etl_tstamp"] = etl_tstamp
+            last_update = get_last_update(row, last_update)
+            singer.write_record(tap_stream_id, row)
 
-            LOGGER.info("Current page %d" % page_number)
-            LOGGER.info("Current offset %d" % offset_number)
+        LOGGER.info("Current page %d" % page_number)
+        LOGGER.info("Current offset %d" % offset_number)
 
-            if len(rows) == 0 or (max_page and page_number + 1 > max_page):
-                break
-            else:
-                page_number +=1
-                offset_number += len(rows)
+
+#         if len(rows) == 0 or (max_page and page_number + 1 > max_page):
+#             pass
+            # break
+#         else:
+#             page_number +=1
+#            offset_number += len(rows)
 
     STATE = singer.write_bookmark(STATE, tap_stream_id, 'last_update', last_update)
     singer.write_state(STATE)
@@ -321,7 +322,7 @@ def get_selected_streams(remaining_streams, annotated_schema):
     return selected_streams
 
 
-def do_sync(STATE, catalog, max_page=None, auth_method="basic"):
+def do_sync(filenames, STATE, catalog, skip=0, max_page=None, auth_method="basic"):
     '''Sync the streams that were selected'''
     start_process_at = datetime.datetime.now()
     remaining_streams = get_streams_to_sync(STREAMS, STATE)
@@ -333,12 +334,14 @@ def do_sync(STATE, catalog, max_page=None, auth_method="basic"):
     LOGGER.info("Starting sync. Will sync these streams: %s", [stream.tap_stream_id for stream in selected_streams])
 
     for stream in selected_streams:
+        filename = filenames[stream.tap_stream_id]
+
         LOGGER.info("Syncing %s", stream.tap_stream_id)
         singer.set_currently_syncing(STATE, stream.tap_stream_id)
         singer.write_state(STATE)
 
         try:
-            STATE = sync_rows(STATE, stream.tap_stream_id, max_page=max_page, auth_method=auth_method)
+            STATE = sync_rows(filename, STATE, stream.tap_stream_id, max_page=max_page, auth_method=auth_method)
         except Exception as e:
             LOGGER.critical(e)
             raise e
@@ -410,7 +413,7 @@ def get_record_list(data, record_list_level):
     return data
 
 
-def do_infer_schema(filename, out_catalog=True, add_tstamp=True):
+def do_infer_schema(filename, skip=0, out_catalog=True, add_tstamp=True):
     """
     Infer schema from the sample record list and write JSON schema and
     catalog files under schema directory and catalog directory.
@@ -418,9 +421,9 @@ def do_infer_schema(filename, out_catalog=True, add_tstamp=True):
     but that is not supported in this function yet.
     """
     # TODO: Support multiple streams specified by STREAM[]
-    tap_stream_id = STREAM[STREAM.keys()[0]].tap_stream_id
+    tap_stream_id = STREAMS[list(STREAMS.keys())[0]].tap_stream_id
 
-    schema = infer_schema_from_csv_file(filename, lower=True, replace_special="-", snake_case=True)
+    schema = infer_from_csv_file(filename, skip=skip, lower=True, replace_special="-", snake_case=True)
 
     if add_tstamp:
         schema["properties"]["_etl_tstamp"] = {"type": ["null", "integer"]}
@@ -544,6 +547,7 @@ def main():
     LOGGER.info("auth_method=%s" % auth_method)
 
     streams = CONFIG["streams"].split(",")
+    filenames = {}
     for stream in streams:
         stream = stream.strip()
         STREAMS[stream] = Stream(stream, CONFIG)
@@ -552,12 +556,14 @@ def main():
         STATE.update(args.state)
     if args.infer_schema:
         filename = crawler.fetch_csv()
-        do_infer_schema(filename)
+        do_infer_schema(filename, args.skip)
     if args.discover:
         do_discover()
     elif args.catalog:
         filename = crawler.fetch_csv()
-        do_sync(filename, STATE, args.catalog, max_page, auth_method)
+        # TODO: Fix this to support multiple streams
+        filenames[streams[0]] = filename
+        do_sync(filenames, STATE, args.catalog, max_page, auth_method)
     else:
         LOGGER.info("No streams were selected")
 

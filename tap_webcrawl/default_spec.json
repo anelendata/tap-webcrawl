@@ -2,6 +2,12 @@
     "application": "REST API singer.io tap",
     "args":
     {
+        "skip":
+        {
+          "type": "integer",
+          "default": 0,
+          "help": "records to skip when inferring schema"
+        },
         "url":
         {
             "type": "string",
