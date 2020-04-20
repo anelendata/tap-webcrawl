@@ -1,18 +1,20 @@
-import os, wget
+import os, time, wget
+from importlib.machinery import SourceFileLoader
 
 from pyvirtualdisplay import Display
 from selenium import webdriver
 
-from . import selenium_ide
+# from . import selenium_ide
 from . import to_csv
 
 
 DOWNLOAD_DIR = "/app/data"
 
-def run_selenium():
+def run_selenium(selenium_ide_python_file, params):
     display = Display(visible=0, size=(1024, 768))
     display.start()
 
+    selenium_ide = SourceFileLoader("module.name", selenium_ide_python_file).load_module()
     test = selenium_ide.TestDefaultSuite()
 
     profile = webdriver.FirefoxProfile()
@@ -24,15 +26,31 @@ def run_selenium():
     test.driver = webdriver.Firefox(firefox_profile=profile)
     test.vars = {}
 
-    test.test_untitled()
+    test.test_untitled(params)
 
-def fetch_csv():
-    run_selenium()
+    display.stop()
+
+
+def fetch_csv(params):
+    run_selenium("./selenium_ide.py", params)
 
     filename = None
     for filename in os.listdir(DOWNLOAD_DIR):
         if filename.endswith(".xls"):
             break
+
+    count = 0
+    found = False
+    while count < 5:
+        if os.path.isfile(os.path.join(DOWNLOAD_DIR, filename)):
+            found = True
+            break
+        time.sleep(2)
+        count = count + 1
+        continue
+
+    if not found:
+        raise Exception("File failed to download")
 
     to_csv.from_xls_html(os.path.join(DOWNLOAD_DIR, filename),
                          os.path.join(DOWNLOAD_DIR, "data.csv"))

@@ -1,5 +1,5 @@
 {
-    "application": "REST API singer.io tap",
+    "application": "Web crawler singer.io tap",
     "args":
     {
         "skip":

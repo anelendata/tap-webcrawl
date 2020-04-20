@@ -423,7 +423,7 @@ def do_infer_schema(filename, skip=0, out_catalog=True, add_tstamp=True):
     # TODO: Support multiple streams specified by STREAM[]
     tap_stream_id = STREAMS[list(STREAMS.keys())[0]].tap_stream_id
 
-    schema = infer_from_csv_file(filename, skip=skip, lower=True, replace_special="-", snake_case=True)
+    schema = infer_from_csv_file(filename, skip=skip, lower=True, replace_special="_", snake_case=True)
 
     if add_tstamp:
         schema["properties"]["_etl_tstamp"] = {"type": ["null", "integer"]}
@@ -464,9 +464,14 @@ def parse_args(spec_file, required_config_keys):
 
     SPEC.update(default_spec)
 
+    custom_spec = {}
     # Overwrite with the custom spec file
     with open(spec_file, "r") as f:
-        SPEC.update(json.load(f))
+        custom_spec.update(json.load(f))
+
+    SPEC["application"] = custom_spec.get("application", SPEC["application"])
+    if custom_spec.get("args"):
+        SPEC["args"].update(custom_spec.get("args"))
 
     parser = argparse.ArgumentParser(SPEC["application"])
 
@@ -555,12 +560,12 @@ def main():
     if args.state:
         STATE.update(args.state)
     if args.infer_schema:
-        filename = crawler.fetch_csv()
+        filename = crawler.fetch_csv(CONFIG)
         do_infer_schema(filename, args.skip)
     if args.discover:
         do_discover()
     elif args.catalog:
-        filename = crawler.fetch_csv()
+        filename = crawler.fetch_csv(CONFIG)
         # TODO: Fix this to support multiple streams
         filenames[streams[0]] = filename
         do_sync(filenames, STATE, args.catalog, max_page, auth_method)
