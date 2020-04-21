@@ -10,7 +10,8 @@ from . import to_csv
 
 DOWNLOAD_DIR = "/app/data"
 
-def run_selenium(selenium_ide_python_file, params):
+def run_selenium(params):
+    selenium_ide_python_file = params["selenium_ide_script"]
     display = Display(visible=0, size=(1024, 768))
     display.start()
 
@@ -32,7 +33,7 @@ def run_selenium(selenium_ide_python_file, params):
 
 
 def fetch_csv(params):
-    run_selenium("./selenium_ide.py", params)
+    run_selenium(params)
 
     filename = None
     for filename in os.listdir(DOWNLOAD_DIR):

@@ -23,7 +23,7 @@ TYPES = {
     "integer": int
     }
 
-REQUIRED_CONFIG_KEYS = ["url"]
+REQUIRED_CONFIG_KEYS = []
 
 LOGGER = singer.get_logger()
 

@@ -8,11 +8,11 @@
           "default": 0,
           "help": "records to skip when inferring schema"
         },
-        "url":
+
+        "selenium_ide_script":
         {
-            "type": "string",
-            "default": null,
-            "help": "REST API endpoint with {params}. Required in config."
+          "type": "string",
+          "help": "Selenium IDE exported script for web-driver instructions"
         },
 
         "streams":
@@ -22,12 +22,6 @@
             "help": "comma-separated strings of tap stream IDs"
         },
 
-        "auth_method":
-        {
-            "type": "string",
-            "default": "basic",
-            "help": "HTTP request authentication method: no_auth, basic, digest, or ntlm"
-        },
         "username":
         {
             "type": "string",
