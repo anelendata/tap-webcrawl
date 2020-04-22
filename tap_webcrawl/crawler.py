@@ -3,14 +3,27 @@ from importlib.machinery import SourceFileLoader
 
 from pyvirtualdisplay import Display
 from selenium import webdriver
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 
-# from . import selenium_ide
 from . import to_csv
 
 
+DOWNLOAD_TIMEOUT_SEC = 600
+SLEEP_FOR_SEC = 10
+
 DOWNLOAD_DIR = "/app/data"
 
-def run_selenium(params):
+
+def get_file(target_ext=".xls"):
+    filename = None
+    for filename in os.listdir(DOWNLOAD_DIR):
+        if filename.endswith(target_ext):
+            break
+    return filename
+
+
+def run_selenium(params, target_ext=".xls"):
+
     selenium_ide_python_file = params["selenium_ide_script"]
     display = Display(visible=0, size=(1024, 768))
     display.start()
@@ -24,36 +37,51 @@ def run_selenium(params):
     profile.set_preference("browser.download.dir", DOWNLOAD_DIR)
     profile.set_preference("browser.helperApps.neverAsk.saveToDisk", "multipart/x-zip,application/zip,application/x-zip-compressed,application/x-compressed,application/msword,application/csv,text/csv,image/png ,image/jpeg, application/pdf, text/html,text/plain,  application/excel, application/vnd.ms-excel, application/x-excel, application/x-msexcel, application/octet-stream, application/x-gzip")
 
-    test.driver = webdriver.Firefox(firefox_profile=profile)
+    cap = DesiredCapabilities().FIREFOX
+    cap["marionette"] = True
+
+    os.environ["PATH"] = "/usr/bin/"
+    test.driver = webdriver.Firefox(firefox_binary="/usr/bin/firefox",
+                                    firefox_profile=profile,
+                                    executable_path="/usr/bin/geckodriver",
+                                    capabilities=cap)
     test.vars = {}
 
     test.test_untitled(params)
 
+    file_size = 0
+    prev_file_size = 0
+    elapsed_time = 0
+    while elapsed_time < DOWNLOAD_TIMEOUT_SEC:
+        elapsed_time = elapsed_time + SLEEP_FOR_SEC
+        time.sleep(SLEEP_FOR_SEC)
+
+        filename = get_file()
+        if not filename:
+            continue
+
+        file_size = os.stat(os.path.join(DOWNLOAD_DIR, filename)).st_size
+        if prev_file_size == file_size:  # No progress for <SLEEP_FOR_SEC> seconds
+            break
+
+        prev_file_size = file_size
+
     display.stop()
 
-
-def fetch_csv(params):
-    run_selenium(params)
-
-    filename = None
-    for filename in os.listdir(DOWNLOAD_DIR):
-        if filename.endswith(".xls"):
-            break
-
-    count = 0
-    found = False
-    while count < 5:
-        if os.path.isfile(os.path.join(DOWNLOAD_DIR, filename)):
-            found = True
-            break
-        time.sleep(2)
-        count = count + 1
-        continue
-
-    if not found:
+    if not filename:
         raise Exception("File failed to download")
 
+    if file_size == 0:
+        raise Exception("File is empty")
+
+    return filename
+
+
+def fetch_csv(params, encoding="utf8"):
+    filename = run_selenium(params)
+
     to_csv.from_xls_html(os.path.join(DOWNLOAD_DIR, filename),
-                         os.path.join(DOWNLOAD_DIR, "data.csv"))
+                         os.path.join(DOWNLOAD_DIR, "data.csv"),
+                         encoding=encoding)
 
     return os.path.join(DOWNLOAD_DIR, "data.csv")

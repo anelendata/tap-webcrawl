@@ -2,6 +2,13 @@
     "application": "Web crawler singer.io tap",
     "args":
     {
+        "encoding":
+        {
+          "type": "string",
+          "default": "utf-8",
+          "help": "file encoding"
+        },
+
         "skip":
         {
           "type": "integer",

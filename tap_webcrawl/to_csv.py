@@ -6,12 +6,11 @@ from bs4 import BeautifulSoup
 import re
 import time
 
-def from_xls_html(infile, outfile):
+def from_xls_html(infile, outfile, encoding="utf-8"):
     shutil.copy(infile, 'changed.html')
     shutil.copy('changed.html','txt_output.txt')
     time.sleep(2)
 
-    encoding="latin-1"
     with open('txt_output.txt','r', encoding=encoding) as f:
         txt = f.read()
 
@@ -25,13 +24,13 @@ def from_xls_html(infile, outfile):
 
     # Save the file as HTML
 
-    with open('./output.html','w') as f:
+    with open("./output.html", "w", encoding="utf-8") as f:
         f.write(txt_with_head)
 
     # Use beautiful soup to read
 
     url = "./output.html"
-    with open(url) as f:
+    with open(url, "r", encoding="utf-8") as f:
         soup = BeautifulSoup(f.read(), features="lxml")
         my_table = soup.find("table",attrs={'border': '1'})
 

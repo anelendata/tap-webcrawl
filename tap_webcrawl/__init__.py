@@ -69,9 +69,10 @@ def get_start(STATE, tap_stream_id, bookmark_key):
         if CONFIG.get("timestamp_key"):
             if not CONFIG.get("start_timestamp") and not CONFIG.get("start_datetime"):
                 raise KeyError("timestamp_key is set but neither start_timestamp or start_datetime is set")
-            current_bookmark = CONFIG.get("start_timestamp")
-            if current_bookmark is None:
-                current_bookmark = dateutil.parser.parse(CONFIG["start_datetime"]).timestamp()
+            if CONFIG.get("start_timestamp") is not None:
+                current_bookmark = int(CONFIG.get("start_timestamp"))
+            elif CONFIG.get("start_datetime") is not None:
+                current_bookmark = int(dateutil.parser.parse(CONFIG["start_datetime"]).timestamp())
         elif CONFIG.get("datetime_key"):
             if not CONFIG.get("start_datetime"):
                 raise KeyError("datetime_key is set but start_datetime is not set")
@@ -105,7 +106,7 @@ def get_last_update(record, current):
         if (key in record) and record[key] > current:
             # Handle the data with sub-seconds converted to int
             ex_digits = len(str(int(record[key]))) - 10
-            last_update = record[key] / (pow(10, ex_digits))
+            last_update = int(record[key] / (pow(10, ex_digits)))
         else:
             KeyError("timestamp_key not found in the record")
     elif CONFIG.get("datetime_key"):
@@ -560,12 +561,12 @@ def main():
     if args.state:
         STATE.update(args.state)
     if args.infer_schema:
-        filename = crawler.fetch_csv(CONFIG)
+        filename = crawler.fetch_csv(CONFIG, encoding=args.encoding)
         do_infer_schema(filename, args.skip)
     if args.discover:
         do_discover()
     elif args.catalog:
-        filename = crawler.fetch_csv(CONFIG)
+        filename = crawler.fetch_csv(CONFIG, encoding=args.encoding)
         # TODO: Fix this to support multiple streams
         filenames[streams[0]] = filename
         do_sync(filenames, STATE, args.catalog, max_page, auth_method)
