@@ -262,7 +262,6 @@ def sync_rows(filename, STATE, tap_stream_id, key_properties=[], auth_method=Non
 
     last_update = start
     page_number = 1
-    offset_number = 0  # Offset is the number of records (vs. page)
     etl_tstamp = int(time.time())
     with metrics.record_counter(tap_stream_id) as counter:
         data = read_csv_as_dict(filename,
@@ -271,6 +270,7 @@ def sync_rows(filename, STATE, tap_stream_id, key_properties=[], auth_method=Non
                                 replace_special="_",
                                 snake_case=True
                                 )
+        LOGGER.info("Read %d records from CSV. ETL timestamp %d" % (len(data), etl_tstamp))
         for row in data:
             counter.increment()
             row = get_record(row, CONFIG.get("record_level"))
@@ -279,17 +279,6 @@ def sync_rows(filename, STATE, tap_stream_id, key_properties=[], auth_method=Non
                 row["_etl_tstamp"] = etl_tstamp
             last_update = get_last_update(row, last_update)
             singer.write_record(tap_stream_id, row)
-
-        LOGGER.info("Current page %d" % page_number)
-        LOGGER.info("Current offset %d" % offset_number)
-
-
-#         if len(rows) == 0 or (max_page and page_number + 1 > max_page):
-#             pass
-            # break
-#         else:
-#             page_number +=1
-#            offset_number += len(rows)
 
     STATE = singer.write_bookmark(STATE, tap_stream_id, 'last_update', last_update)
     singer.write_state(STATE)
