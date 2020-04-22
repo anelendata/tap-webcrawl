@@ -548,11 +548,17 @@ def main():
 
     STATE = {}
 
+    # Use args.x only for commands. Not params
     auth_method = CONFIG.get("auth_method")
     max_page = CONFIG.get("max_page")
+    skip = CONFIG.get("skip")
+    encoding = CONFIG.get("encoding")
+    streams = CONFIG["streams"].split(",")
+
+    LOGGER.info("Skipping the first %s rows" % skip)
+    LOGGER.info("Assumed file encoding %s" % encoding)
     LOGGER.info("auth_method=%s" % auth_method)
 
-    streams = CONFIG["streams"].split(",")
     filenames = {}
     for stream in streams:
         stream = stream.strip()
@@ -560,16 +566,17 @@ def main():
 
     if args.state:
         STATE.update(args.state)
+
     if args.infer_schema:
-        filename = crawler.fetch_csv(CONFIG, encoding=args.encoding)
-        do_infer_schema(filename, args.skip)
+        filename = crawler.fetch_csv(CONFIG, encoding=encoding)
+        do_infer_schema(filename, skip)
     if args.discover:
         do_discover()
     elif args.catalog:
-        filename = crawler.fetch_csv(CONFIG, encoding=args.encoding)
+        filename = crawler.fetch_csv(CONFIG, encoding=encoding)
         # TODO: Fix this to support multiple streams
         filenames[streams[0]] = filename
-        do_sync(filenames, STATE, args.catalog, max_page, auth_method)
+        do_sync(filenames, STATE, args.catalog, skip, max_page, auth_method)
     else:
         LOGGER.info("No streams were selected")
 
