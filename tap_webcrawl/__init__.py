@@ -261,7 +261,6 @@ def sync_rows(filename, STATE, tap_stream_id, key_properties=[], auth_method=Non
     LOGGER.info("Stream %s has %s set starting %s and ending %s. I trust you set URL format contains those params. The behavior depends on the data source API's spec. I will not filter out the records outside the boundary. Every record received is will be written out." % (tap_stream_id, bookmark_type, pretty_start, pretty_end))
 
     last_update = start
-    page_number = 1
     etl_tstamp = int(time.time())
     with metrics.record_counter(tap_stream_id) as counter:
         data = read_csv_as_dict(filename,
@@ -270,6 +269,7 @@ def sync_rows(filename, STATE, tap_stream_id, key_properties=[], auth_method=Non
                                 replace_special="_",
                                 snake_case=True
                                 )
+
         LOGGER.info("Read %d records from CSV. ETL timestamp %d" % (len(data), etl_tstamp))
         for row in data:
             counter.increment()
@@ -281,6 +281,7 @@ def sync_rows(filename, STATE, tap_stream_id, key_properties=[], auth_method=Non
             singer.write_record(tap_stream_id, row)
 
     STATE = singer.write_bookmark(STATE, tap_stream_id, 'last_update', last_update)
+
     singer.write_state(STATE)
     return STATE
 
@@ -501,6 +502,11 @@ def parse_args(spec_file, required_config_keys):
         action='store_true',
         help='Do infer schema')
 
+    parser.add_argument(
+        "--offline", "-o",
+        action="store_true",
+        help="Offline test mode")
+
     args = parser.parse_args()
 
     if args.config:
@@ -557,12 +563,12 @@ def main():
         STATE.update(args.state)
 
     if args.infer_schema:
-        filename = crawler.fetch_csv(CONFIG, encoding=encoding)
+        filename = crawler.fetch_csv(CONFIG, encoding=encoding, offline=args.offline)
         do_infer_schema(filename, skip)
     if args.discover:
         do_discover()
     elif args.catalog:
-        filename = crawler.fetch_csv(CONFIG, encoding=encoding)
+        filename = crawler.fetch_csv(CONFIG, encoding=encoding, offline=args.offline)
         # TODO: Fix this to support multiple streams
         filenames[streams[0]] = filename
         do_sync(filenames, STATE, args.catalog, skip, max_page, auth_method)

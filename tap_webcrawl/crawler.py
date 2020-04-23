@@ -23,6 +23,7 @@ def get_file(target_ext=".xls"):
 
 
 def run_selenium(params, target_ext=".xls"):
+    part_file_ext = ".part"
 
     selenium_ide_python_file = params["selenium_ide_script"]
     display = Display(visible=0, size=(1024, 768))
@@ -51,22 +52,42 @@ def run_selenium(params, target_ext=".xls"):
 
     file_size = 0
     prev_file_size = 0
+
+    part_file_size = 0
+    prev_part_file_size = 0
+
+    # Wait for downlaod
     elapsed_time = 0
     while elapsed_time < DOWNLOAD_TIMEOUT_SEC:
         elapsed_time = elapsed_time + SLEEP_FOR_SEC
         time.sleep(SLEEP_FOR_SEC)
 
-        filename = get_file()
-        if not filename:
+        filename = get_file(target_ext=target_ext)
+        part_filename = get_file(target_ext=part_file_ext)
+
+        if not filename and not part_filename:
             continue
 
-        file_size = os.stat(os.path.join(DOWNLOAD_DIR, filename)).st_size
-        if prev_file_size == file_size:  # No progress for <SLEEP_FOR_SEC> seconds
+        if filename:
+            file_size = os.stat(os.path.join(DOWNLOAD_DIR, filename)).st_size
+        if part_filename:
+            part_file_size = os.stat(os.path.join(DOWNLOAD_DIR, part_filename)).st_size
+
+        if prev_file_size == file_size and prev_part_file_size == part_file_size:  # No progress for <SLEEP_FOR_SEC> seconds
             break
 
         prev_file_size = file_size
+        prev_part_file_size = part_file_size
 
     display.stop()
+
+    # Wait for copying part to real
+    elapsed_time = 0
+    while file_size == 0 and elapsed_time < DOWNLOAD_TIMEOUT_SEC:
+        elapsed_time = elapsed_time + SLEEP_FOR_SEC
+        time.sleep(SLEEP_FOR_SEC)
+        filename = get_file(target_ext=target_ext)
+        file_size = os.stat(os.path.join(DOWNLOAD_DIR, filename)).st_size
 
     if not filename:
         raise Exception("File failed to download")
@@ -77,9 +98,15 @@ def run_selenium(params, target_ext=".xls"):
     return filename
 
 
-def fetch_csv(params, encoding="utf8"):
-    filename = run_selenium(params)
+def fetch_csv(params, encoding="utf8", offline=False):
+    target_ext = "." + params.get("file_type", "xls")
 
+    if not offline:
+        filename = run_selenium(params, target_ext)
+    else:
+        filename = get_file(target_ext)
+
+    print(filename)
     to_csv.from_xls_html(os.path.join(DOWNLOAD_DIR, filename),
                          os.path.join(DOWNLOAD_DIR, "data.csv"),
                          encoding=encoding)
