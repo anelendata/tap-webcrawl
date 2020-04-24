@@ -1,4 +1,4 @@
-import os, time, wget
+import logging, os, sys, time, wget
 from importlib.machinery import SourceFileLoader
 
 from pyvirtualdisplay import Display
@@ -6,6 +6,12 @@ from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 
 from . import to_csv
+
+
+logging.basicConfig(stream=sys.stdout,
+                    format="%(asctime)s - " + str(__name__) + " - %(name)s - %(levelname)s - %(message)s",
+                    level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 DOWNLOAD_TIMEOUT_SEC = 600
@@ -106,7 +112,8 @@ def fetch_csv(params, encoding="utf8", offline=False):
     else:
         filename = get_file(target_ext)
 
-    print(filename)
+    logger.info("file: %s (offline mode: %s)" % (os.path.join(DOWNLOAD_DIR, filename), str(offline)))
+
     to_csv.from_xls_html(os.path.join(DOWNLOAD_DIR, filename),
                          os.path.join(DOWNLOAD_DIR, "data.csv"),
                          encoding=encoding)
